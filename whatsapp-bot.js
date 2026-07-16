@@ -128,6 +128,19 @@ client.on('ready', () => {
   console.log(`📱 QRIS Path: ${CONFIG.qrisImagePath}`);
   console.log(`💡 Ketik .help di chat WA untuk lihat commands`);
   console.log('════════════════════════════════════════');
+
+  // Register browser console logs listener to debug any WhatsApp Web page internal errors
+  try {
+    client.pupPage.on('console', msg => {
+      const text = msg.text();
+      // Only print warnings and errors to avoid spamming normal logs
+      if (text.includes('Error') || text.includes('failed') || text.includes('exception') || text.includes('Warning')) {
+        console.log(`🌐 BROWSER WARNING/ERROR: ${text}`);
+      }
+    });
+  } catch (err) {
+    console.error('⚠️ Failed to register browser console listener:', err.message);
+  }
 });
 
 client.on('auth_failure', (msg) => {
@@ -431,7 +444,7 @@ async function handlePay(msg, args) {
       const from = UserPrefsMeUser.getMaybeMePnUser();
 
       // Create fake quoted order message (verified catalog look)
-      const fakeQuoted = {
+      const fakeQuotedData = {
         id: {
           fromMe: false,
           remote: WidFactory.createWid('status@broadcast'),
@@ -452,6 +465,9 @@ async function handlePay(msg, args) {
         isForwarded: true,
         forwardingScore: 999
       };
+
+      const MsgModel = Collections.Msg.modelClass;
+      const fakeQuoted = new MsgModel(fakeQuotedData);
 
       const options = {
         media: {
