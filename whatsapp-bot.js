@@ -434,8 +434,9 @@ async function handlePay(msg, args) {
       const WidFactory = await getModule('WAWebWidFactory');
       const Collections = await getModule('WAWebCollections');
       const UserPrefsMeUser = await getModule('WAWebUserPrefsMeUser');
+      const MsgKey = await getModule('WAWebMsgKey');
 
-      if (!WidFactory || !Collections || !UserPrefsMeUser) {
+      if (!WidFactory || !Collections || !UserPrefsMeUser || !MsgKey) {
         throw new Error('Required WhatsApp Web modules failed to load within timeout');
       }
 
@@ -443,14 +444,17 @@ async function handlePay(msg, args) {
       const chat = await Collections.Chat.find(chatWid);
       const from = UserPrefsMeUser.getMaybeMePnUser();
 
+      const fakeKey = new MsgKey({
+        from: WidFactory.createWid('status@broadcast'),
+        to: chatWid,
+        id: 'FAKE_' + Math.random().toString(36).substring(2, 15).toUpperCase(),
+        participant: WidFactory.createWid('0@s.whatsapp.net'),
+        selfDir: 'in',
+      });
+
       // Create fake quoted order message (verified catalog look)
       const fakeQuotedData = {
-        id: {
-          fromMe: false,
-          remote: WidFactory.createWid('status@broadcast'),
-          id: 'FAKE_' + Math.random().toString(36).substring(2, 15).toUpperCase(),
-          _serialized: `false_status@broadcast_FAKE`
-        },
+        id: fakeKey,
         type: 'order',
         body: title,
         orderId: '2029',
