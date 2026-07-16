@@ -394,7 +394,6 @@ async function handlePay(msg, args) {
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `⏱️ ${getWIBTime()} WIB\n` +
     `🏪 _${CONFIG.storeName}_`;
-
   // Send QRIS image with invoice caption
   try {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
@@ -413,8 +412,14 @@ async function handlePay(msg, args) {
     
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
-    console.error('Error sending QRIS:', err);
-    await client.sendMessage(chatId, `❌ Gagal mengirim QRIS. Error: ${err.message}`);
+    console.error('Error sending QRIS image:', err);
+    // Fallback: Send plain text invoice if media fails
+    try {
+      await client.sendMessage(chatId, invoiceText + '\n\n⚠️ _Gagal mengirim gambar QRIS, silakan hubungi admin langsung untuk QRIS._');
+      console.log(`ℹ️ Sent text-only fallback invoice due to error: ${err.message}`);
+    } catch (fallbackErr) {
+      console.error('Fallback message sending failed:', fallbackErr.message);
+    }
   }
 }
 
