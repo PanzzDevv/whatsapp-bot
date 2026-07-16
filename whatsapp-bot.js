@@ -360,20 +360,18 @@ async function sendCatalogOrderMsg(chatId, title, messageText, itemCount, imageP
 async function handleHelp(msg) {
   const chatId = msg.fromMe ? msg.to : msg.from;
   const helpText = 
-    `🤖 *${CONFIG.storeName} — WhatsApp Payment Bot*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `📋 *Daftar Command:*\n\n` +
-    `*.pay <nominal> <deskripsi>*\n` +
-    `Kirim invoice + QRIS ke buyer\n` +
-    `Contoh: _.pay 50000 Netflix 1 Bulan_\n\n` +
-    `*.done*\n` +
-    `Konfirmasi pembayaran diterima\n\n` +
-    `*.cancel*\n` +
-    `Batalkan invoice aktif di chat ini\n\n` +
-    `*.help*\n` +
-    `Tampilkan pesan ini\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚠️ _Hanya admin yang bisa pakai command_`;
+    `🤖 *${CONFIG.storeName.toUpperCase()} BOT MENU*\n` +
+    `───────────────────\n` +
+    ` ▪️ *.pay <nominal> <deskripsi>*\n` +
+    `     Kirim invoice & QRIS ke buyer.\n` +
+    ` ▪️ *.done*\n` +
+    `     Konfirmasi pembayaran sukses.\n` +
+    ` ▪️ *.cancel*\n` +
+    `     Batalkan invoice aktif.\n` +
+    ` ▪️ *.help*\n` +
+    `     Tampilkan menu bantuan ini.\n` +
+    `───────────────────\n` +
+    ` ⚠️ Admin Only Command`;
 
   await client.sendMessage(chatId, helpText);
 }
@@ -390,14 +388,13 @@ async function handlePay(msg, args) {
       `Cara pakai:\n` +
       `*.pay <nominal> <deskripsi>*\n\n` +
       `Contoh:\n` +
-      `_.pay 50000 Netflix 1 Bulan_\n` +
-      `_.pay 100000 Top Up ML_`
+      `_.pay 50000 Netflix 1 Bulan_`
     );
   }
 
   const nominal = parseInt(args[0]);
   if (isNaN(nominal) || nominal <= 0) {
-    return client.sendMessage(chatId, `❌ Nominal tidak valid! Harus angka lebih dari 0.\n\nContoh: _.pay 50000 Netflix 1 Bulan_`);
+    return client.sendMessage(chatId, `❌ Nominal tidak valid! Harus angka lebih dari 0.`);
   }
 
   const deskripsi = args.slice(1).join(' ');
@@ -408,8 +405,7 @@ async function handlePay(msg, args) {
     return client.sendMessage(chatId, 
       `❌ *File QRIS tidak ditemukan!*\n\n` +
       `Taruh gambar QRIS Dana Bisnis Anda di:\n` +
-      `\`${CONFIG.qrisImagePath}\`\n\n` +
-      `Lalu restart bot.`
+      `\`${CONFIG.qrisImagePath}\``
     );
   }
 
@@ -421,28 +417,19 @@ async function handlePay(msg, args) {
     createdAt: new Date().toISOString(),
   });
 
-  // Build invoice message
-  const cleanChatId = chatId.replace('@c.us', '');
-  const adminDoneLink = `https://wa.me/${cleanChatId}?text=${CONFIG.commandPrefix}done`;
-  const adminCancelLink = `https://wa.me/${cleanChatId}?text=${CONFIG.commandPrefix}cancel`;
-
+  // Build invoice message (Cyberpunk Style)
   const invoiceText =
-    `🧾 *INVOICE ${CONFIG.storeName.toUpperCase()}*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `🆔 *Order:* \`${orderId}\`\n` +
-    `📝 *Produk:* ${deskripsi}\n` +
-    `💰 *Total:* *${formatIDR(nominal)}*\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `📱 *Scan QRIS di bawah untuk bayar:*\n\n` +
-    `⚠️ Pastikan nominal *TEPAT ${formatIDR(nominal)}*\n` +
-    `📸 Kirim *bukti transfer* setelah bayar\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `⚡ *Admin Quick Actions:*\n` +
-    `👉 [Konfirmasi Selesai](${adminDoneLink})\n` +
-    `👉 [Batalkan Transaksi](${adminCancelLink})\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `⏱️ ${getWIBTime()} WIB\n` +
-    `🏪 _${CONFIG.storeName}_`;
+    `🧾 *${CONFIG.storeName.toUpperCase()} INVOICE*\n` +
+    `───────────────────\n` +
+    ` ▪️ Order ID   : \`${orderId}\`\n` +
+    ` ▪️ Item       : ${deskripsi}\n` +
+    ` ▪️ Total Bill : *${formatIDR(nominal)}*\n` +
+    `───────────────────\n` +
+    ` 📱 Pindai QRIS di bawah untuk bayar.\n` +
+    ` 📸 Kirim bukti transfer ke chat ini.\n` +
+    `───────────────────\n` +
+    ` 🏪 Thank you for shopping with us!`;
+
   // Send QRIS image with invoice caption
   try {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
@@ -453,7 +440,7 @@ async function handlePay(msg, args) {
       try {
         await sendCatalogOrderMsg(
           chatId, 
-          CONFIG.storeName, // Catalog title
+          `${CONFIG.storeName.toUpperCase()} • Status`, // Catalog title
           'Official Store Invoice', // Message caption
           9999, // Item count
           CONFIG.qrisImagePath
@@ -488,15 +475,12 @@ async function handleDone(msg) {
   }
 
   const confirmText =
-    `✅ *PEMBAYARAN DIKONFIRMASI!*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `🆔 *Order:* \`${invoice.orderId}\`\n` +
-    `📝 *Produk:* ${invoice.deskripsi}\n` +
-    `💰 *Total:* ${formatIDR(invoice.nominal)}\n\n` +
-    `Terima kasih sudah belanja di *${CONFIG.storeName}*! 🙏\n` +
-    `Pesanan sedang diproses...\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `⏱️ ${getWIBTime()} WIB`;
+    `✅ *PAYMENT SUCCESSFUL*\n` +
+    `───────────────────\n` +
+    ` Pembayaran untuk order \`${invoice.orderId}\` telah diterima.\n` +
+    ` Pesanan Anda sedang diproses oleh admin. Terima kasih!\n` +
+    `───────────────────\n` +
+    ` ⏱️ ${getWIBTime()} WIB`;
 
   await client.sendMessage(chatId, confirmText);
 
@@ -518,15 +502,10 @@ async function handleCancel(msg) {
   }
 
   const cancelText =
-    `❌ *INVOICE DIBATALKAN*\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `🆔 *Order:* \`${invoice.orderId}\`\n` +
-    `📝 *Produk:* ${invoice.deskripsi}\n` +
-    `💰 *Total:* ${formatIDR(invoice.nominal)}\n\n` +
-    `Invoice ini telah dibatalkan oleh admin.\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `⏱️ ${getWIBTime()} WIB\n` +
-    `🏪 _${CONFIG.storeName}_`;
+    `❌ *INVOICE CANCELLED*\n` +
+    `───────────────────\n` +
+    ` Transaksi dengan Order ID \`${invoice.orderId}\` telah dibatalkan oleh admin.\n` +
+    `───────────────────`;
 
   await client.sendMessage(chatId, cancelText);
 
