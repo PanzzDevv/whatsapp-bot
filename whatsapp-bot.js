@@ -396,14 +396,14 @@ async function handlePay(msg, args) {
 
   // Send QRIS image and Invoice text in ONE single message quoting the Verified Catalog Card
   try {
-    // 1. Read the image as base64 for the custom catalog thumbnail and media payload
+    // 1. Read the image as base64 for the custom catalog thumbnail
     let base64Thumb = '';
     if (fs.existsSync(CONFIG.qrisImagePath)) {
       base64Thumb = fs.readFileSync(CONFIG.qrisImagePath, { encoding: 'base64' });
     }
 
-    // 2. Send the image + invoice caption quoting the verified catalog card!
-    await client.pupPage.evaluate(async (chatId, title, invoiceText, base64) => {
+    // 2. Inject the fake catalog card model into the browser's WAWebCollections.Msg database
+    const fakeQuotedId = await client.pupPage.evaluate(async (chatId, title, base64) => {
       // Helper to dynamically wait until WWebJS modules are ready
       const getModule = (name) => {
         return new Promise((resolve) => {
@@ -433,17 +433,15 @@ async function handlePay(msg, args) {
 
       const WidFactory = await getModule('WAWebWidFactory');
       const Collections = await getModule('WAWebCollections');
-      const UserPrefsMeUser = await getModule('WAWebUserPrefsMeUser');
       const MsgKey = await getModule('WAWebMsgKey');
 
-      if (!WidFactory || !Collections || !UserPrefsMeUser || !MsgKey) {
+      if (!WidFactory || !Collections || !MsgKey) {
         throw new Error('Required WhatsApp Web modules failed to load within timeout');
       }
 
       const chatWid = WidFactory.createWid(chatId);
-      const chat = await Collections.Chat.find(chatWid);
-      const from = UserPrefsMeUser.getMaybeMePnUser();
 
+      // Create proper MsgKey instance
       const fakeKey = new MsgKey({
         from: WidFactory.createWid('status@broadcast'),
         to: chatWid,
@@ -461,7 +459,7 @@ async function handlePay(msg, args) {
         itemCount: '9999',
         status: 1, // INQUIRY
         surface: 'CATALOG',
-        sellerJid: from.toString(),
+        sellerJid: chatWid.toString(),
         token: 'AR6xBKbXZn0Xwmu76Ksyd7rnxI+Rx87HfinVlW4lwXa6JA==',
         thumbnail: base64,
         caption: title,
@@ -473,22 +471,18 @@ async function handlePay(msg, args) {
       const MsgModel = Collections.Msg.modelClass;
       const fakeQuoted = new MsgModel(fakeQuotedData);
 
-      const options = {
-        media: {
-          mimetype: 'image/jpeg',
-          data: base64,
-          filename: 'qris.jpg'
-        },
-        caption: invoiceText,
-        extraOptions: {
-          quotedMsg: fakeQuoted,
-          quotedStanzaID: fakeQuoted.id.id,
-          quotedParticipant: fakeQuoted.participant
-        }
-      };
+      // Save into browser's local memory message collection so WWebJS can resolve it when quoting
+      Collections.Msg.add(fakeQuoted);
 
-      await window.WWebJS.sendMessage(chat, undefined, options);
-    }, chatId, "Panzztzy ☇ Crasher", invoiceText, base64Thumb);
+      return fakeKey._serialized;
+    }, chatId, "Panzztzy ☇ Crasher", base64Thumb);
+
+    // 3. Send media (QRIS) + Invoice text with the quoted fake message ID!
+    const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
+    await client.sendMessage(chatId, media, {
+      caption: invoiceText,
+      quotedMessageId: fakeQuotedId
+    });
 
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
