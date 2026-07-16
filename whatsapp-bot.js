@@ -311,7 +311,7 @@ function generateOrderId() {
  */
 async function handleHelp(msg) {
   const chatId = msg.fromMe ? msg.to : msg.from;
-  const helpText = 
+  const helpText =
     `🤖 *${CONFIG.storeName.toUpperCase()} BOT MENU*\n` +
     `───────────────────\n` +
     ` ▪️ *.pay <nominal> <deskripsi>*\n` +
@@ -335,7 +335,7 @@ async function handlePay(msg, args) {
   const chatId = msg.fromMe ? msg.to : msg.from;
   // Parse arguments
   if (args.length < 2) {
-    return client.sendMessage(chatId, 
+    return client.sendMessage(chatId,
       `❌ *Format salah!*\n\n` +
       `Cara pakai:\n` +
       `*.pay <nominal> <deskripsi>*\n\n` +
@@ -354,7 +354,7 @@ async function handlePay(msg, args) {
 
   // Check if QRIS image exists
   if (!fs.existsSync(CONFIG.qrisImagePath)) {
-    return client.sendMessage(chatId, 
+    return client.sendMessage(chatId,
       `❌ *File QRIS tidak ditemukan!*\n\n` +
       `Taruh gambar QRIS Dana Bisnis Anda di:\n` +
       `\`${CONFIG.qrisImagePath}\``
@@ -369,7 +369,7 @@ async function handlePay(msg, args) {
     createdAt: new Date().toISOString(),
   });
 
-// Build invoice message (Cyberpunk Style)
+  // Build invoice message (Cyberpunk Style)
   const invoiceText =
     `🧾 *${CONFIG.storeName.toUpperCase()} INVOICE*\n` +
     `───────────────────\n` +
@@ -385,7 +385,7 @@ async function handlePay(msg, args) {
   // Send QRIS image + Invoice text with custom Link Preview (Ad Reply)
   try {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
-    
+
     // 1. Send the clean full-size QRIS image first
     await client.sendMessage(chatId, media);
 
@@ -398,13 +398,13 @@ async function handlePay(msg, args) {
     // 3. Send the invoice text with the custom Link Preview (mimics externalAdReply)
     await client.sendMessage(chatId, invoiceText + '\n\n🔗 https://t.me/miminpanzn', {
       linkPreview: {
-        title: "Panzztzy ☇ Crasher",
-        description: "© - 2026 Bot's",
+        title: "Panzstore",
+        description: "Panzzstore - 2026 Bot's",
         clientUrl: "https://t.me/miminpanzn",
         thumbnail: base64Thumb
       }
     });
-    
+
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
     console.error('Error sending invoice:', err);
