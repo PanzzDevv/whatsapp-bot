@@ -301,6 +301,54 @@ function generateOrderId() {
   return `WA-${dateStr}-${random}`;
 }
 
+/**
+ * Sends a Baileys-style custom Order/Catalog message using Puppeteer evaluation
+ */
+async function sendCatalogOrderMsg(chatId, title, messageText, itemCount, imagePath) {
+  try {
+    let base64Image = '';
+    if (fs.existsSync(imagePath)) {
+      base64Image = fs.readFileSync(imagePath, { encoding: 'base64' });
+    }
+
+    await client.pupPage.evaluate(async (chatId, title, messageText, itemCount, base64) => {
+      const chatWid = window.Store.WidFactory.createWid(chatId);
+      const chat = await window.Store.Chat.find(chatWid);
+      const newMsgId = await window.Store.MsgKey.newId();
+      
+      const msg = {
+        id: newMsgId,
+        ack: 0,
+        from: window.Store.Conn.wid,
+        to: chatWid,
+        local: true,
+        self: 'out',
+        t: parseInt(Date.now() / 1000),
+        type: 'order',
+        body: title,
+        orderId: '2029',
+        itemCount: itemCount.toString(),
+        status: 1, // INQUIRY
+        surface: 'CATALOG',
+        sellerJid: window.Store.Conn.wid.toString(),
+        token: 'AR6xBKbXZn0Xwmu76Ksyd7rnxI+Rx87HfinVlW4lwXa6JA==',
+        thumbnail: base64,
+        caption: messageText,
+        // Spoof verified badge (participant = 0@s.whatsapp.net)
+        participant: '0@s.whatsapp.net',
+        isForwarded: true,
+        forwardingScore: 999
+      };
+      
+      await window.Store.addAndSendMsgToChat(chat, msg);
+    }, chatId, title, messageText, itemCount, base64Image);
+
+    console.log(`📦 Sent catalog order card to ${chatId}`);
+  } catch (err) {
+    console.error('Failed to send catalog order message:', err.message);
+  }
+}
+
 // ═══════════════════════════════════════
 // COMMAND HANDLERS
 // ═══════════════════════════════════════
@@ -399,16 +447,20 @@ async function handlePay(msg, args) {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
     await client.sendMessage(chatId, media, { caption: invoiceText });
 
-    // Optional: Send Catalog Rich Link Preview Card right after the invoice if configured
-    if (CONFIG.catalogLink) {
-      setTimeout(async () => {
-        try {
-          await client.sendMessage(chatId, CONFIG.catalogLink, { linkPreview: true });
-        } catch (e) {
-          console.error('Failed to send catalog preview:', e.message);
-        }
-      }, 1000);
-    }
+    // Send Baileys-style Catalog Message (with Verified Checkmark) right after the QRIS image
+    setTimeout(async () => {
+      try {
+        await sendCatalogOrderMsg(
+          chatId, 
+          CONFIG.storeName, // Catalog title
+          'Official Store Invoice', // Message caption
+          9999, // Item count
+          CONFIG.qrisImagePath
+        );
+      } catch (e) {
+        console.error('Failed to send catalog order message:', e.message);
+      }
+    }, 1000);
     
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
