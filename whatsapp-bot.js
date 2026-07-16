@@ -396,11 +396,11 @@ async function handlePay(msg, args) {
     }
 
     // 3. Send the invoice text with the custom Link Preview (mimics externalAdReply)
-    await client.sendMessage(chatId, invoiceText + '\n\n🔗 https://t.me/miminpanzn', {
+    await client.sendMessage(chatId, invoiceText + '\n\n🔗 https://t.me/miminpanz', {
       linkPreview: {
         title: "Panzstore",
         description: "Panzzstore - 2026 Bot's",
-        clientUrl: "https://t.me/miminpanzn",
+        clientUrl: "https://t.me/miminpanz",
         thumbnail: base64Thumb
       }
     });
