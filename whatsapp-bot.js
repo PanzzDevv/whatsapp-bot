@@ -42,6 +42,41 @@ let isConnected = false;
 const activeInvoices = new Map();
 
 // ═══════════════════════════════════════
+// STALE LOCKS CLEANUP (RAILWAY/DOCKER FIX)
+// ═══════════════════════════════════════
+
+const authPath = process.env.AUTH_DATA_PATH || path.join(__dirname, '.wwebjs_auth');
+function cleanStaleLocks(dir) {
+  if (!fs.existsSync(dir)) return;
+  try {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      let stat;
+      try {
+        stat = fs.lstatSync(fullPath);
+      } catch (e) {
+        // Skip files that are broken symlinks or inaccessible
+        continue;
+      }
+      if (stat.isDirectory()) {
+        cleanStaleLocks(fullPath);
+      } else if (file === 'SingletonLock') {
+        try {
+          fs.unlinkSync(fullPath);
+          console.log(`🧹 Deleted stale Chromium lock: ${fullPath}`);
+        } catch (err) {
+          console.error(`⚠️ Failed to delete lock ${fullPath}:`, err.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error reading auth directory for cleanup:', err.message);
+  }
+}
+cleanStaleLocks(authPath);
+
+// ═══════════════════════════════════════
 // WHATSAPP CLIENT SETUP
 // ═══════════════════════════════════════
 
