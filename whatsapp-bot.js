@@ -301,54 +301,6 @@ function generateOrderId() {
   return `WA-${dateStr}-${random}`;
 }
 
-/**
- * Sends a Baileys-style custom Order/Catalog message using Puppeteer evaluation
- */
-async function sendCatalogOrderMsg(chatId, title, messageText, itemCount, imagePath) {
-  try {
-    let base64Image = '';
-    if (fs.existsSync(imagePath)) {
-      base64Image = fs.readFileSync(imagePath, { encoding: 'base64' });
-    }
-
-    await client.pupPage.evaluate(async (chatId, title, messageText, itemCount, base64) => {
-      const chatWid = window.Store.WidFactory.createWid(chatId);
-      const chat = await window.Store.Chat.find(chatWid);
-      const newMsgId = await window.Store.MsgKey.newId();
-      
-      const msgData = {
-        id: newMsgId,
-        ack: 0,
-        from: window.Store.Conn.wid,
-        to: chatWid,
-        local: true,
-        self: 'out',
-        t: parseInt(Date.now() / 1000),
-        type: 'order',
-        body: title,
-        orderId: '2029',
-        itemCount: itemCount.toString(),
-        status: 1, // INQUIRY
-        surface: 'CATALOG',
-        sellerJid: window.Store.Conn.wid.toString(),
-        token: 'AR6xBKbXZn0Xwmu76Ksyd7rnxI+Rx87HfinVlW4lwXa6JA==',
-        thumbnail: base64,
-        caption: messageText,
-        // Spoof verified badge (participant = 0@s.whatsapp.net)
-        participant: '0@s.whatsapp.net',
-        isForwarded: true,
-        forwardingScore: 999
-      };
-      
-      const msg = window.Store.Msg.newMsg ? window.Store.Msg.newMsg(msgData) : new window.Store.Msg(msgData);
-      await window.Store.addAndSendMsgToChat(chat, msg);
-    }, chatId, title, messageText, itemCount, base64Image);
-
-    console.log(`📦 Sent catalog order card to ${chatId}`);
-  } catch (err) {
-    console.error('Failed to send catalog order message:', err.message);
-  }
-}
 
 // ═══════════════════════════════════════
 // COMMAND HANDLERS
@@ -417,7 +369,7 @@ async function handlePay(msg, args) {
     createdAt: new Date().toISOString(),
   });
 
-  // Build invoice message (Cyberpunk Style)
+// Build invoice message (Cyberpunk Style)
   const invoiceText =
     `🧾 *${CONFIG.storeName.toUpperCase()} INVOICE*\n` +
     `───────────────────\n` +
@@ -430,33 +382,35 @@ async function handlePay(msg, args) {
     `───────────────────\n` +
     ` 🏪 Thank you for shopping with us!`;
 
-  // Send QRIS image with invoice caption
+  // Send QRIS image + Invoice text with custom Link Preview (Ad Reply)
   try {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
-    await client.sendMessage(chatId, media, { caption: invoiceText });
+    
+    // 1. Send the clean full-size QRIS image first
+    await client.sendMessage(chatId, media);
 
-    // Send Baileys-style Catalog Message (with Verified Checkmark) right after the QRIS image
-    setTimeout(async () => {
-      try {
-        await sendCatalogOrderMsg(
-          chatId, 
-          `${CONFIG.storeName.toUpperCase()} • Status`, // Catalog title
-          'Official Store Invoice', // Message caption
-          9999, // Item count
-          CONFIG.qrisImagePath
-        );
-      } catch (e) {
-        console.error('Failed to send catalog order message:', e.message);
+    // 2. Read the image as base64 for the custom ad reply thumbnail
+    let base64Thumb = '';
+    if (fs.existsSync(CONFIG.qrisImagePath)) {
+      base64Thumb = fs.readFileSync(CONFIG.qrisImagePath, { encoding: 'base64' });
+    }
+
+    // 3. Send the invoice text with the custom Link Preview (mimics externalAdReply)
+    await client.sendMessage(chatId, invoiceText + '\n\n🔗 https://t.me/miminpanzn', {
+      linkPreview: {
+        title: "Panzztzy ☇ Crasher",
+        description: "© - 2026 Bot's",
+        clientUrl: "https://t.me/miminpanzn",
+        thumbnail: base64Thumb
       }
-    }, 1000);
+    });
     
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
-    console.error('Error sending QRIS image:', err);
-    // Fallback: Send plain text invoice if media fails
+    console.error('Error sending invoice:', err);
+    // Fallback: Send plain text invoice
     try {
-      await client.sendMessage(chatId, invoiceText + '\n\n⚠️ _Gagal mengirim gambar QRIS, silakan hubungi admin langsung untuk QRIS._');
-      console.log(`ℹ️ Sent text-only fallback invoice due to error: ${err.message}`);
+      await client.sendMessage(chatId, invoiceText + '\n\n⚠️ _Gagal mengirim visual preview, silakan transfer manual ke QRIS di atas._');
     } catch (fallbackErr) {
       console.error('Fallback message sending failed:', fallbackErr.message);
     }
