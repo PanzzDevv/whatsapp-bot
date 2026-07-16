@@ -248,6 +248,7 @@ app.listen(PORT, () => {
 });
 
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════
 
@@ -255,6 +256,7 @@ app.listen(PORT, () => {
  * Check if message sender is the admin
  */
 function isAdmin(msg) {
+  if (msg.fromMe) return true;
   // msg.from format: "628xxx@c.us"
   const senderNumber = msg.from.replace('@c.us', '').replace('@s.whatsapp.net', '');
   // In group chats, check msg.author instead
@@ -306,6 +308,7 @@ function generateOrderId() {
  * .help — Show available commands
  */
 async function handleHelp(msg) {
+  const chatId = msg.fromMe ? msg.to : msg.from;
   const helpText = 
     `🤖 *${CONFIG.storeName} — WhatsApp Payment Bot*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -322,16 +325,17 @@ async function handleHelp(msg) {
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `⚠️ _Hanya admin yang bisa pakai command_`;
 
-  await msg.reply(helpText);
+  await client.sendMessage(chatId, helpText);
 }
 
 /**
  * .pay <nominal> <deskripsi> — Generate invoice + send QRIS
  */
 async function handlePay(msg, args) {
+  const chatId = msg.fromMe ? msg.to : msg.from;
   // Parse arguments
   if (args.length < 2) {
-    return msg.reply(
+    return client.sendMessage(chatId, 
       `❌ *Format salah!*\n\n` +
       `Cara pakai:\n` +
       `*.pay <nominal> <deskripsi>*\n\n` +
@@ -343,16 +347,15 @@ async function handlePay(msg, args) {
 
   const nominal = parseInt(args[0]);
   if (isNaN(nominal) || nominal <= 0) {
-    return msg.reply(`❌ Nominal tidak valid! Harus angka lebih dari 0.\n\nContoh: _.pay 50000 Netflix 1 Bulan_`);
+    return client.sendMessage(chatId, `❌ Nominal tidak valid! Harus angka lebih dari 0.\n\nContoh: _.pay 50000 Netflix 1 Bulan_`);
   }
 
   const deskripsi = args.slice(1).join(' ');
   const orderId = generateOrderId();
-  const chatId = msg.from;
 
   // Check if QRIS image exists
   if (!fs.existsSync(CONFIG.qrisImagePath)) {
-    return msg.reply(
+    return client.sendMessage(chatId, 
       `❌ *File QRIS tidak ditemukan!*\n\n` +
       `Taruh gambar QRIS Dana Bisnis Anda di:\n` +
       `\`${CONFIG.qrisImagePath}\`\n\n` +
@@ -391,7 +394,7 @@ async function handlePay(msg, args) {
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
     console.error('Error sending QRIS:', err);
-    await msg.reply(`❌ Gagal mengirim QRIS. Error: ${err.message}`);
+    await client.sendMessage(chatId, `❌ Gagal mengirim QRIS. Error: ${err.message}`);
   }
 }
 
@@ -399,11 +402,11 @@ async function handlePay(msg, args) {
  * .done — Confirm payment received
  */
 async function handleDone(msg) {
-  const chatId = msg.from;
+  const chatId = msg.fromMe ? msg.to : msg.from;
   const invoice = activeInvoices.get(chatId);
 
   if (!invoice) {
-    return msg.reply(`ℹ️ Tidak ada invoice aktif di chat ini.`);
+    return client.sendMessage(chatId, `ℹ️ Tidak ada invoice aktif di chat ini.`);
   }
 
   const confirmText =
@@ -429,11 +432,11 @@ async function handleDone(msg) {
  * .cancel — Cancel active invoice
  */
 async function handleCancel(msg) {
-  const chatId = msg.from;
+  const chatId = msg.fromMe ? msg.to : msg.from;
   const invoice = activeInvoices.get(chatId);
 
   if (!invoice) {
-    return msg.reply(`ℹ️ Tidak ada invoice aktif di chat ini.`);
+    return client.sendMessage(chatId, `ℹ️ Tidak ada invoice aktif di chat ini.`);
   }
 
   const cancelText =
