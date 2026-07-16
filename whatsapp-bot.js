@@ -316,7 +316,7 @@ async function sendCatalogOrderMsg(chatId, title, messageText, itemCount, imageP
       const chat = await window.Store.Chat.find(chatWid);
       const newMsgId = await window.Store.MsgKey.newId();
       
-      const msg = {
+      const msgData = {
         id: newMsgId,
         ack: 0,
         from: window.Store.Conn.wid,
@@ -340,6 +340,7 @@ async function sendCatalogOrderMsg(chatId, title, messageText, itemCount, imageP
         forwardingScore: 999
       };
       
+      const msg = window.Store.Msg.newMsg ? window.Store.Msg.newMsg(msgData) : new window.Store.Msg(msgData);
       await window.Store.addAndSendMsgToChat(chat, msg);
     }, chatId, title, messageText, itemCount, base64Image);
 
