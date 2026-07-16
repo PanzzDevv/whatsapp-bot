@@ -18,6 +18,8 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrTerminal = require('qrcode-terminal');
 const fs = require('fs');
+const express = require('express');
+const QRCode = require('qrcode');
 
 // ═══════════════════════════════════════
 // CONFIG
@@ -29,6 +31,12 @@ const CONFIG = {
   storeName: process.env.STORE_NAME_WA || 'PanzzStore',
   commandPrefix: '.',
 };
+
+// Express Setup
+const app = express();
+const PORT = process.env.PORT || 3000;
+let qrCodeDataUrl = null;
+let isConnected = false;
 
 // Track active invoices per chat (chatId -> invoice data)
 const activeInvoices = new Map();
@@ -65,9 +73,18 @@ client.on('qr', (qr) => {
   console.log('════════════════════════════════════════\n');
   qrTerminal.generate(qr, { small: true });
   console.log('\n════════════════════════════════════════\n');
+
+  // Convert QR code to base64 Data URL for web display
+  QRCode.toDataURL(qr, (err, url) => {
+    if (!err) {
+      qrCodeDataUrl = url;
+    }
+  });
 });
 
 client.on('ready', () => {
+  isConnected = true;
+  qrCodeDataUrl = null;
   console.log('════════════════════════════════════════');
   console.log(`✅ WhatsApp Payment Bot READY!`);
   console.log(`🏪 Store: ${CONFIG.storeName}`);
@@ -84,6 +101,115 @@ client.on('auth_failure', (msg) => {
 
 client.on('disconnected', (reason) => {
   console.log('⚠️ WhatsApp terputus:', reason);
+  isConnected = false;
+});
+
+// ═══════════════════════════════════════
+// WEB PORTAL ROUTES
+// ═══════════════════════════════════════
+
+app.get('/', (req, res) => {
+  if (isConnected) {
+    return res.send(`
+      <html>
+        <head>
+          <title>${CONFIG.storeName} WA Bot</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 50px; background: #f0f2f5; color: #1c1e21; display: flex; align-items: center; justify-content: center; height: 80vh; margin: 0; }
+            .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
+            h1 { color: #25d366; margin-bottom: 10px; }
+            .status { font-weight: bold; color: #25d366; font-size: 1.2em; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>${CONFIG.storeName} Bot</h1>
+            <p class="status">✅ WhatsApp Bot Connected & Running!</p>
+            <p style="color: #606770;">Anda bisa menutup halaman ini sekarang.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  if (!qrCodeDataUrl) {
+    return res.send(`
+      <html>
+        <head>
+          <title>Generating QR...</title>
+          <meta http-equiv="refresh" content="3">
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 50px; background: #f0f2f5; display: flex; align-items: center; justify-content: center; height: 80vh; margin: 0; }
+            .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
+            .spinner { border: 4px solid rgba(0,0,0,0.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #09f; animation: spin 1s linear infinite; margin: 20px auto; }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2>⏳ Menyiapkan QR Code...</h2>
+            <div class="spinner"></div>
+            <p style="color: #606770;">Sedang menyiapkan sesi WhatsApp Web, halaman ini akan otomatis memuat ulang.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  res.send(`
+    <html>
+      <head>
+        <title>Scan WhatsApp QR Code</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: sans-serif; text-align: center; padding: 30px; background: #f0f2f5; color: #1c1e21; display: flex; align-items: center; justify-content: center; min-height: 90vh; margin: 0; }
+          .card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 6px 18px rgba(0,0,0,0.1); max-width: 450px; width: 100%; }
+          h1 { color: #075e54; margin-top: 0; }
+          img { max-width: 250px; width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white; margin: 15px auto; display: block; }
+          .instructions { text-align: left; margin: 20px 0; font-size: 0.95em; line-height: 1.5; color: #4a4a4a; background: #f9f9f9; padding: 15px; border-radius: 8px; }
+          ol { padding-left: 20px; margin: 8px 0 0 0; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Scan QR Code</h1>
+          <p>Scan QR code di bawah ini untuk menghubungkan bot WhatsApp.</p>
+          <img src="${qrCodeDataUrl}" alt="WhatsApp QR Code" />
+          <div class="instructions">
+            <strong>Cara Menghubungkan:</strong>
+            <ol>
+              <li>Buka WhatsApp di HP Anda.</li>
+              <li>Ketuk menu <strong>Linked Devices</strong> (Perangkat Tertaut).</li>
+              <li>Ketuk <strong>Link a Device</strong> (Tautkan Perangkat).</li>
+              <li>Arahkan kamera HP Anda ke kode QR di atas.</li>
+            </ol>
+          </div>
+          <p style="font-size: 0.8em; color: #888;">Halaman ini akan otomatis dialihkan setelah berhasil masuk.</p>
+        </div>
+        <script>
+          // Cek status koneksi setiap 3 detik
+          setInterval(() => {
+            fetch('/status')
+              .then(res => res.json())
+              .then(data => {
+                if (data.connected) {
+                  window.location.reload();
+                }
+              });
+          }, 3000);
+        </script>
+      </body>
+    </html>
+  `);
+});
+
+app.get('/status', (req, res) => {
+  res.json({ connected: isConnected });
+});
+
+app.listen(PORT, () => {
+  console.log(`📡 Web Portal QR Code berjalan di http://localhost:${PORT}`);
 });
 
 // ═══════════════════════════════════════
