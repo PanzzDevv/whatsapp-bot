@@ -30,6 +30,7 @@ const CONFIG = {
   qrisImagePath: path.resolve(__dirname, process.env.QRIS_IMAGE_PATH || './assets/qris-dana.jpg'),
   storeName: process.env.STORE_NAME_WA || 'PanzzStore',
   commandPrefix: '.',
+  catalogLink: process.env.CATALOG_LINK || '',
 };
 
 // Express Setup
@@ -372,6 +373,10 @@ async function handlePay(msg, args) {
   });
 
   // Build invoice message
+  const cleanChatId = chatId.replace('@c.us', '');
+  const adminDoneLink = `https://wa.me/${cleanChatId}?text=${CONFIG.commandPrefix}done`;
+  const adminCancelLink = `https://wa.me/${cleanChatId}?text=${CONFIG.commandPrefix}cancel`;
+
   const invoiceText =
     `🧾 *INVOICE ${CONFIG.storeName.toUpperCase()}*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -382,6 +387,10 @@ async function handlePay(msg, args) {
     `📱 *Scan QRIS di bawah untuk bayar:*\n\n` +
     `⚠️ Pastikan nominal *TEPAT ${formatIDR(nominal)}*\n` +
     `📸 Kirim *bukti transfer* setelah bayar\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `⚡ *Admin Quick Actions:*\n` +
+    `👉 [Konfirmasi Selesai](${adminDoneLink})\n` +
+    `👉 [Batalkan Transaksi](${adminCancelLink})\n\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `⏱️ ${getWIBTime()} WIB\n` +
     `🏪 _${CONFIG.storeName}_`;
@@ -390,6 +399,17 @@ async function handlePay(msg, args) {
   try {
     const media = MessageMedia.fromFilePath(CONFIG.qrisImagePath);
     await client.sendMessage(chatId, media, { caption: invoiceText });
+
+    // Optional: Send Catalog Rich Link Preview Card right after the invoice if configured
+    if (CONFIG.catalogLink) {
+      setTimeout(async () => {
+        try {
+          await client.sendMessage(chatId, CONFIG.catalogLink, { linkPreview: true });
+        } catch (e) {
+          console.error('Failed to send catalog preview:', e.message);
+        }
+      }, 1000);
+    }
     
     console.log(`💳 Invoice sent: ${orderId} | ${formatIDR(nominal)} | ${deskripsi} | Chat: ${chatId}`);
   } catch (err) {
